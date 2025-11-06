@@ -446,7 +446,7 @@ export class NDKCashuWallet extends NDKWallet {
             counters: mergedCounters,
         });
 
-        await info.encrypt();
+        await info.encrypt(user);
         const relays = await info.publishReplaceable(relaySet);
 
         return relays;
