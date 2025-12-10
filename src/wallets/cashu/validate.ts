@@ -1,7 +1,6 @@
 import { CheckStateEnum, ProofState, type Proof } from "@cashu/cashu-ts";
 import createDebug from "debug";
 import type { NDKCashuWallet } from "./wallet/index.js";
-import { walletForMint } from "./mint";
 import { WalletProofChange } from "./wallet/state/index.js";
 
 const d = createDebug("ndk-wallet:cashu:validate");
@@ -33,7 +32,7 @@ export async function consolidateMintTokens(
     onFailure?: (error: string) => void
 ) {
     allProofs ??= wallet.state.getProofs({ mint, includeDeleted: true, onlyAvailable: false });
-    const _wallet = await walletForMint(mint, { bip39seed: wallet.bip39seed });
+    const _wallet = await wallet.getCashuWallet(mint, wallet.bip39seed);
     if (!_wallet) {
         console.log("could not get wallet for mint %s", mint);
         return;

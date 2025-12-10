@@ -1,7 +1,6 @@
 import { CashuWallet, CashuMint, GetInfoResponse, MintKeys } from "@cashu/cashu-ts";
 import { MintUrl } from "./mint/utils";
 
-const mintWallets = new Map<string, CashuWallet>();
 const mintWalletPromises = new Map<string, Promise<CashuWallet | null>>();
 
 function mintKey(mint: MintUrl, unit: string, pk?: Uint8Array) {
@@ -25,7 +24,6 @@ export async function walletForMint(
         timeout = 5000,
         mintInfo,
         mintKeys,
-        ephemeralWallet = false,
         onMintInfoNeeded,
         onMintInfoLoaded,
         onMintKeysNeeded,
@@ -36,7 +34,6 @@ export async function walletForMint(
         timeout?: number;
         mintInfo?: GetInfoResponse;
         mintKeys?: MintKeys[];
-        ephemeralWallet?: boolean;
         onMintInfoNeeded?: (mint: string) => Promise<GetInfoResponse | undefined>;
         onMintInfoLoaded?: (mint: string, info: GetInfoResponse) => void;
         onMintKeysNeeded?: (mint: string) => Promise<MintKeys[] | undefined>;
@@ -53,11 +50,6 @@ export async function walletForMint(
 
     const unit = "sat";
     const key = mintKey(mint, unit, pk);
-    
-    // Check if we already have a wallet for this mint
-    if (!ephemeralWallet && mintWallets.has(key)) {
-        return mintWallets.get(key) as CashuWallet;
-    }
 
     // Check if there's already a promise to load this wallet
     if (mintWalletPromises.has(key)) {
@@ -99,9 +91,6 @@ export async function walletForMint(
             
             await Promise.race([wallet.loadMint(), timeoutPromise]);
             
-            if (!ephemeralWallet) {
-                mintWallets.set(key, wallet);
-            }
             mintWalletPromises.delete(key);
 
             if (wallet.keys) {

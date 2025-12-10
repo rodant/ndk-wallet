@@ -1,13 +1,11 @@
-import { CashuWallet, SendResponse, type Proof } from "@cashu/cashu-ts";
+import { SendResponse, type Proof } from "@cashu/cashu-ts";
 import type { MintUrl } from "../mint/utils";
 import { NDKCashuWallet } from "../wallet/index.js";
 import { CashuPaymentInfo, normalizeUrl } from "@nostr-dev-kit/ndk";
 import { getBolt11Amount } from "../../../utils/ln";
-import { walletForMint } from "../mint";
 import { WalletOperation, withProofReserve } from "../wallet/effect";
 import { payLn } from "./ln";
 import { ensureIsCashuPubkey, mintProofs } from "../../../utils/cashu";
-import { CounterEntry } from "../wallet/state";
 
 export type NutPayment = CashuPaymentInfo & { amount: number };
 
@@ -120,7 +118,7 @@ async function createTokenWithMintTransfer(
 ): Promise<WalletOperation<TokenCreationResult> | null> {
     const generateQuote = async () => {
         const generateQuoteFromSomeMint = async (mint: MintUrl) => {
-            const targetMintWallet = await walletForMint(mint, { bip39seed: wallet.bip39seed });
+            const targetMintWallet = await wallet.getCashuWallet(mint, wallet.bip39seed);
             if (!targetMintWallet) throw new Error("unable to load wallet for mint " + mint);
             const quote = await targetMintWallet.createMintQuote(amount);
             return { quote, mint, targetMintWallet };

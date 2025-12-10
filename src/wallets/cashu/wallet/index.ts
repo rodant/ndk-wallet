@@ -663,7 +663,6 @@ export class NDKCashuWallet extends NDKWallet {
             } else { // use an ephemeral cashu wallet to restore a different wallet
                 cashuWallet = await walletForMint(mint, {
                     bip39seed: bip39seed,
-                    ephemeralWallet: true,
                     onMintInfoNeeded: this.onMintInfoNeeded,
                     onMintInfoLoaded: this.onMintInfoLoaded,
                     onMintKeysNeeded: this.onMintKeysNeeded,
