@@ -56,6 +56,11 @@ export type RestoreWalletOpts = {
     activeKeysets?: boolean
 }
 
+export type TransferFundsOps = {
+    skipConsolidation?: boolean,
+    transferMints?: string | string[]
+}
+
 /**
  * This class tracks state of a NIP-60 wallet
  */
@@ -728,15 +733,20 @@ export class NDKCashuWallet extends NDKWallet {
     }
 
     /**
-     * Transfers all the funds from one wallet to another. All the mints having a positive amount must be a mint of the receiving wallet, otherwise an error is thrown.
+     * Transfers all the funds from one wallet to another. All the mints having a positive amount (or the ops.transferMints if specified) must be a mint of the receiving wallet, otherwise an error is thrown.
      * @param receivingNDKWallet the wallet receiving the funds. This wallet must not be a deterministic one.
+     * @param ops optional options to customize the operation.
      * @returns true if the funds are secured by deterministic secrets after the transfer.
      */
-    public async transferAllFundsTo(receivingNDKWallet: NDKCashuWallet): Promise<boolean> {
-        await this.consolidateTokens();
+    public async transferAllFundsTo(receivingNDKWallet: NDKCashuWallet, ops?: TransferFundsOps): Promise<boolean> {
+        if (!ops?.skipConsolidation) {
+            await this.consolidateTokens();
+        }
         const mintBalances = this.mintBalances;
+        const mintKeys = Object.keys(mintBalances);
+        const mints = ops?.transferMints ? mintKeys.filter(m => ops.transferMints?.includes(m)) : mintKeys;
         let deterministicTransfer = !!receivingNDKWallet._bip39seed;
-        for (const mint of Object.keys(mintBalances)) {
+        for (const mint of mints) {
             if (!receivingNDKWallet.mints.includes(mint)) {
                 throw new Error(`Precondition violated: every sending mint (${mint}) must be a mint of the receiving wallet too!`);
             }
