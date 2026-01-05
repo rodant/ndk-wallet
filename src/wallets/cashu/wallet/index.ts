@@ -765,8 +765,8 @@ export class NDKCashuWallet extends NDKWallet {
                         await receivingNDKWallet.incrementDeterministicCounter(currentCounterEntry.counterKey, counterIncrement);
                     }
                 } catch(e) {
-                    console.error(`Error while transfering funds to new wallet. The funds will be stored in the new wallet, but without deterministic secrets!`);
-                    console.error("To ensure all the funds are secured by deterministic secrets, please retry by transfering all funds again with this method, or send the e-Cash to yourself.")
+                    console.error(`Error while transferring funds to new wallet. The funds will be stored in the new wallet, but without deterministic secrets!`);
+                    console.error("To ensure all the funds are secured by deterministic secrets, please retry by transferring all funds again with this method, or send the e-Cash to yourself.")
                     receivedProofs = proofs;
                     deterministicTransfer = false;
                 }
