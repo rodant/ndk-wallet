@@ -21,7 +21,7 @@ import NDK, {
 } from "@nostr-dev-kit/ndk";
 import { NDKCashuDeposit } from "../deposit.js";
 import type { MintUrl } from "../mint/utils.js";
-import { CashuWallet, getEncodedTokenV4, Proof, SendResponse } from "@cashu/cashu-ts";
+import { CashuWallet, Proof, SendResponse } from "@cashu/cashu-ts";
 import { getDecodedToken } from "@cashu/cashu-ts";
 import { consolidateMintTokens, consolidateTokens } from "../validate.js";
 import {
@@ -54,11 +54,6 @@ export type RestoreWalletOpts = {
     batchSize?: number,
     startCounter?: number,
     activeKeysets?: boolean
-}
-
-export type TransferFundsOps = {
-    skipConsolidation?: boolean,
-    transferMints?: string | string[]
 }
 
 /**
@@ -730,54 +725,6 @@ export class NDKCashuWallet extends NDKWallet {
         }
 
         return { errors: aggregatedErrors, proofs: resultProofs };
-    }
-
-    /**
-     * Transfers all the funds from one wallet to another. All the mints having a positive amount (or the ops.transferMints if specified) must be a mint of the receiving wallet, otherwise an error is thrown.
-     * @param receivingNDKWallet the wallet receiving the funds. This wallet must not be a deterministic one.
-     * @param ops optional options to customize the operation.
-     * @returns true if the funds are secured by deterministic secrets after the transfer.
-     */
-    // TODO: move this method to satshoot
-    public async transferAllFundsTo(receivingNDKWallet: NDKCashuWallet, ops?: TransferFundsOps): Promise<boolean> {
-        if (!ops?.skipConsolidation) {
-            await this.consolidateTokens();
-        }
-        const mintBalances = this.mintBalances;
-        const mintKeys = Object.keys(mintBalances);
-        const mints = ops?.transferMints ? mintKeys.filter(m => ops.transferMints?.includes(m)) : mintKeys;
-        let deterministicTransfer = !!receivingNDKWallet.bip39seed;
-        for (const mint of mints) {
-            if (!receivingNDKWallet.mints.includes(mint)) {
-                throw new Error(`Precondition violated: every sending mint (${mint}) must be a mint of the receiving wallet too!`);
-            }
-            const proofs = this.state.getProofs({ mint: mint, onlyAvailable: true });
-            if (proofs.length) {
-                let receivedProofs: Proof[];
-                try {
-                    const token = getEncodedTokenV4({ mint, proofs });
-                    const receivingWallet = await receivingNDKWallet.getCashuWallet(mint, receivingNDKWallet.bip39seed);
-                    const currentCounterEntry = await receivingNDKWallet.state.getCounterEntryFor(receivingWallet.mint);
-                    const counter = receivingNDKWallet.bip39seed ? currentCounterEntry.counter ?? 1 : undefined;//cashu-ts 2.7.4 ignores counter == 0!
-                    receivedProofs = await receivingWallet.receive(token, { counter });
-                    if (receivingNDKWallet.bip39seed && receivedProofs.length) {
-                        const counterIncrement = counter == 1 ? receivedProofs.length + 1 : receivedProofs.length;
-                        await receivingNDKWallet.incrementDeterministicCounter(currentCounterEntry.counterKey, counterIncrement);
-                    }
-                } catch(e) {
-                    console.error(`Error while transferring funds to new wallet. The funds will be stored in the new wallet, but without deterministic secrets!`);
-                    console.error("To ensure all the funds are secured by deterministic secrets, please retry by transferring all funds again with this method, or send the e-Cash to yourself.")
-                    receivedProofs = proofs;
-                    deterministicTransfer = false;
-                }
-    
-                for (const proof of receivedProofs) {
-                    receivingNDKWallet.state.addProof({ mint, proof, state: "available", timestamp: Date.now() });
-                }
-
-            }
-        }
-        return deterministicTransfer;
     }
 
     public warn(msg: string, event?: NDKEvent, relays?: NDKRelay[]) {
