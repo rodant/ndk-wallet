@@ -391,7 +391,7 @@ export class NDKCashuWallet extends NDKWallet {
         return resultPromise;
     }
 
-    public async incrementDeterministicCounter(counterKey: string, counterIncrement: number, tries: number = 3) {
+    public async incrementDeterministicCounter(counterKey: string, counterIncrement: number, mergeCounters: boolean = true, tries: number = 3) {
         if (counterIncrement <= 0) return;
 
         tries--;
@@ -399,13 +399,13 @@ export class NDKCashuWallet extends NDKWallet {
             const counter = this.state.getNextCounterByKey(counterKey);
             const nextCounter = (counter ?? 0) + counterIncrement;
             this.state.setNextCounterByKey(counterKey, nextCounter);
-            await this.publishDeterministicInfo();
+            await this.publishDeterministicInfo(this.relaySet, mergeCounters);
             console.log(`Published new counter ${nextCounter} for mint ${counterKey}`);
         } catch (e) {
             console.warn("[wallet] publishDeterministicInfo failed (mint transfer)!", e);
             if (tries >= 0) {
                 console.log("Retrying ...");
-                await this.incrementDeterministicCounter(counterKey, 0, tries);
+                await this.incrementDeterministicCounter(counterKey, 0, mergeCounters, tries);
             }
             // If we can't publish event update the counter anyway to avoid secret collisions
             console.error("Giving up to publish deterministic info, but at least stored the last counter locally! Counter-Key: ", counterKey);
@@ -418,7 +418,7 @@ export class NDKCashuWallet extends NDKWallet {
      * - Requires bip39seed to be set/derivable
      * - Encrypts content with NIP-44
      */
-    private async publishDeterministicInfo(relaySet: NDKRelaySet | undefined = this.relaySet): Promise<Set<NDKRelay>> {
+    private async publishDeterministicInfo(relaySet: NDKRelaySet | undefined = this.relaySet, mergeCounters: boolean = true): Promise<Set<NDKRelay>> {
         const seed = this._bip39seed;
         if (!seed) throw new Error("bip39seed not set");
 
@@ -426,29 +426,31 @@ export class NDKCashuWallet extends NDKWallet {
 
         // Local snapshot
         const localCounters = this.state.getDeterministicCountersSnapshot();
+        let newCounters: Record<string, number> = { ...localCounters };
 
-        // Merge with latest remote (per-key max)
-        const latestRemote = await this.fetchLatestDeterministicInfoEvent(user.pubkey, relaySet);
-        let mergedCounters: Record<string, number> = { ...localCounters };
-
-        if (latestRemote) {
-            try {
-                await latestRemote.decrypt();
-                const parsed = JSON.parse(latestRemote.content);
-                if (isDeterministicCashuWalletInfoContent(parsed)) {
-                    mergedCounters = this.mergeCountersMax(mergedCounters, parsed.counters ?? {});
+        if (mergeCounters) {
+            // Merge with latest remote (per-key max)
+            const latestRemote = await this.fetchLatestDeterministicInfoEvent(user.pubkey, relaySet);
+    
+            if (latestRemote) {
+                try {
+                    await latestRemote.decrypt();
+                    const parsed = JSON.parse(latestRemote.content);
+                    if (isDeterministicCashuWalletInfoContent(parsed)) {
+                        newCounters = this.mergeCountersMax(newCounters, parsed.counters ?? {});
+                    }
+                } catch {
+                    // ignore decrypt/parse errors and keep local snapshot
                 }
-            } catch {
-                // ignore decrypt/parse errors and keep local snapshot
             }
-        }
-
-        // Ensure internal state doesn't regress vs merged snapshot
-        for (const [k, v] of Object.entries(mergedCounters)) {
-            try {
-                this.state.setNextCounterByKey(k, v);
-            } catch {
-                // ignore invalid key formats
+    
+            // Ensure internal state doesn't regress vs merged snapshot
+            for (const [k, v] of Object.entries(newCounters)) {
+                try {
+                    this.state.setNextCounterByKey(k, v);
+                } catch {
+                    // ignore invalid key formats
+                }
             }
         }
 
@@ -458,7 +460,7 @@ export class NDKCashuWallet extends NDKWallet {
         info.tags = [];
         info.content = JSON.stringify({
             bip39seed: bytesToHex(seed),
-            counters: mergedCounters,
+            counters: newCounters,
         });
 
         await info.encrypt(user);
