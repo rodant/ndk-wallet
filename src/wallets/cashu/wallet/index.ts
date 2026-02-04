@@ -681,7 +681,6 @@ export class NDKCashuWallet extends NDKWallet {
       counters: newCounters,
     });
 
-    console.warn('wallet: deterministic content stringified', info.content)
 
     await info.encrypt(user, undefined, "nip44");
 
