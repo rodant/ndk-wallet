@@ -369,48 +369,48 @@ export class NDKCashuWallet extends NDKWallet {
               ? deterministicInfoEvent.content.length
               : 0,
         });
-        deterministicInfo = deterministicInfoEvent.content
+        deterministicInfo = deterministicInfoEvent.content;
       } catch (e) {
         console.warn("Error decrypting deterministic wallet event, skipping deterministic info.", e);
       }
+    }
 
-      // Initialize WalletState with counters snapshot parsed from deterministic info
-      let countersSnapshot: Record<string, number> | undefined;
-      let hasDeterministicInfo = false;
+    // Initialize WalletState with counters snapshot parsed from deterministic info
+    let countersSnapshot: Record<string, number> | undefined;
+    let hasDeterministicInfo = false;
 
-      if (deterministicInfo) {
-        try {
-          const infoContent = JSON.parse(deterministicInfo) as {
-            bip39seed?: string;
-            counters?: Record<string, number>;
-          };
+    if (deterministicInfo) {
+      try {
+        const infoContent = JSON.parse(deterministicInfo) as {
+          bip39seed?: string;
+          counters?: Record<string, number>;
+        };
 
-          if (typeof infoContent.bip39seed === "string") {
-            wallet._bip39seed = hexToBytes(infoContent.bip39seed);
-            if (isDeterministicCashuWalletInfoContent(infoContent)) {
-              countersSnapshot = infoContent.counters;
-            } else if (infoContent.counters && typeof infoContent.counters === "object") {
-              countersSnapshot = infoContent.counters;
-            } else {
-              countersSnapshot = {};
-            }
-            hasDeterministicInfo = true;
-            console.warn(`${logPrefix} deterministic info parsed`, {
-              hasSeed: true,
-              countersCount: countersSnapshot ? Object.keys(countersSnapshot).length : 0,
-            });
+        if (typeof infoContent.bip39seed === "string") {
+          wallet._bip39seed = hexToBytes(infoContent.bip39seed);
+          if (isDeterministicCashuWalletInfoContent(infoContent)) {
+            countersSnapshot = infoContent.counters;
+          } else if (infoContent.counters && typeof infoContent.counters === "object") {
+            countersSnapshot = infoContent.counters;
+          } else {
+            countersSnapshot = {};
           }
-        } catch (e) {
-          console.warn("Error parsing deterministic wallet info payload, skipping deterministic info.", e);
+          hasDeterministicInfo = true;
+          console.warn(`${logPrefix} deterministic info parsed`, {
+            hasSeed: true,
+            countersCount: countersSnapshot ? Object.keys(countersSnapshot).length : 0,
+          });
         }
+      } catch (e) {
+        console.warn("Error parsing deterministic wallet info payload, skipping deterministic info.", e);
       }
+    }
 
-      if (hasDeterministicInfo) {
-        wallet.state = new WalletState(wallet, new Set<string>(), countersSnapshot ?? {});
-        console.warn(`${logPrefix} deterministic state applied`, {
-          countersCount: countersSnapshot ? Object.keys(countersSnapshot).length : 0,
-        });
-      }
+    if (hasDeterministicInfo) {
+      wallet.state = new WalletState(wallet, new Set<string>(), countersSnapshot ?? {});
+      console.warn(`${logPrefix} deterministic state applied`, {
+        countersCount: countersSnapshot ? Object.keys(countersSnapshot).length : 0,
+      });
     }
 
     try {
