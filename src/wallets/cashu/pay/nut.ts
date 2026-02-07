@@ -6,6 +6,7 @@ import { getBolt11Amount } from "../../../utils/ln";
 import { WalletOperation, withProofReserve } from "../wallet/effect";
 import { payLn } from "./ln";
 import { ensureIsCashuPubkey, mintProofs } from "../../../utils/cashu";
+import { consolidateMintTokens } from "../validate.js";
 
 export type NutPayment = CashuPaymentInfo & { amount: number };
 
@@ -62,10 +63,11 @@ async function createTokenInMint(
     p2pk?: string
 ): Promise<WalletOperation<TokenCreationResult> | null> {
     const cashuWallet = await wallet.getCashuWallet(mint, wallet.bip39seed);
-    try {
-        console.log("Attempting with mint %s", mint);
+    console.log("Attempting with mint %s", mint);
 
-        const currentCounterEntry = await wallet.state.getCounterEntryFor(cashuWallet.mint);
+    const currentCounterEntry = await wallet.state.getCounterEntryFor(cashuWallet.mint);
+
+    const attemptSend = async (): Promise<WalletOperation<TokenCreationResult> | null> => {
         const result = await withProofReserve<TokenCreationResult>(
             wallet,
             cashuWallet,
@@ -99,11 +101,32 @@ async function createTokenInMint(
         }
 
         return result;
-    } catch (e: any) {
-        console.log("failed to pay with mint %s using proofs %o: %s", mint, e.message);
-    }
+    };
 
-    return null;
+    let retried = false;
+    while (true) {
+        try {
+            return await attemptSend();
+        } catch (e: any) {
+            if (!retried && e instanceof Error && e.message.match(/already spent/i)) {
+                retried = true;
+                console.log("Proofs already spent, consolidate mint tokens");
+                try {
+                    await consolidateMintTokens(mint, wallet);
+                    continue;
+                } catch (retryError: any) {
+                    console.log(
+                        "failed to consolidate proofs for mint %s: %s",
+                        mint,
+                        retryError?.message || retryError
+                    );
+                }
+            }
+
+            console.log("failed to pay with mint %s: %s", mint, e?.message || e);
+            return null;
+        }
+    }
 }
 
 /**

@@ -5,6 +5,7 @@ import { WalletOperation, withProofReserve } from "../wallet/effect.js";
 import { calculateFee } from "../wallet/fee.js";
 import { NDKPaymentConfirmationLN } from "@nostr-dev-kit/ndk";
 import { consolidateMintTokens } from "../validate.js";
+import type { MeltProofsResponse } from "@cashu/cashu-ts";
 
 /**
  * Pay a Lightning Network invoice with a Cashu wallet.
@@ -98,12 +99,46 @@ async function executePayment(
             async (proofsToUse, allOurProofs) => {
                 const counterEntry = await wallet.state.getCounterEntryFor(cashuWallet.mint);
                 const counter = wallet.bip39seed ? counterEntry.counter ?? 0 : undefined;
-                const meltResult = await cashuWallet.meltProofs(meltQuote, proofsToUse, { counter });
+                const totalInputAmount = proofsToUse.reduce((sum, proof) => sum + proof.amount, 0);
+                const changeAmount = totalInputAmount - meltQuote.amount;
+                let blankOutputsCount = 0;
+                if (changeAmount > 0) {
+                    blankOutputsCount = Math.ceil(Math.log2(changeAmount)) || 1;
+                }
+                if (wallet.bip39seed && blankOutputsCount > 0) {
+                    await wallet.incrementDeterministicCounter(
+                        counterEntry.counterKey,
+                        blankOutputsCount
+                    );
+                }
+
+                let meltResult: MeltProofsResponse;
+                try {
+                    meltResult = await cashuWallet.meltProofs(meltQuote, proofsToUse, { counter });
+                } catch (error: any) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    const isDuplicateOutputError = /outputs have already been signed before/i.test(
+                        errorMessage
+                    );
+
+                    if (wallet.bip39seed && blankOutputsCount > 0 && isDuplicateOutputError) {
+                        wallet.warn(
+                            `Wallet auto-repair: duplicate melt outputs detected for ${mint}. Retrying once with a new counter.`
+                        );
+                        await wallet.incrementDeterministicCounter(
+                            counterEntry.counterKey,
+                            blankOutputsCount
+                        );
+                        const retryCounter = (counter ?? 0) + blankOutputsCount;
+                        meltResult = await cashuWallet.meltProofs(meltQuote, proofsToUse, {
+                            counter: retryCounter,
+                        });
+                    } else {
+                        throw error;
+                    }
+                }
 
                 if (meltResult.quote.state === MeltQuoteState.PAID) {
-                    if (wallet.bip39seed && meltResult.change.length) {
-                        await wallet.incrementDeterministicCounter(counterEntry.counterKey, meltResult.change.length);
-                    }
                     return {
                         result: {
                             preimage: meltResult.quote.payment_preimage ?? "",

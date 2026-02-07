@@ -18,8 +18,8 @@ export async function fetchPage(
             cacheUsage: NDKSubscriptionCacheUsage.ONLY_RELAY,
             groupable: false,
             subId: "recent-nutzap",
-        },
-        relaySet
+            relaySet,
+        }
     );
 
     return Array.from(events)
