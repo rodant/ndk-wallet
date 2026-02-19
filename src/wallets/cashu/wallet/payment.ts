@@ -65,7 +65,15 @@ export class PaymentHandler {
      * Swaps tokens to a specific amount, optionally locking to a p2pk.
      */
     async cashuPay(
-        payment: NDKZapDetails<CashuPaymentInfo>
+        payment: NDKZapDetails<CashuPaymentInfo>,
+        p2pk?: {
+            pubkey: string | string[];
+            locktime?: number;
+            refundKeys?: string[];
+            requiredSignatures?: number;
+            requiredRefundSignatures?: number;
+            additionalTags?: Array<[key: string, ...values: string[]]>;
+        }
     ): Promise<NDKPaymentConfirmationCashu | undefined> {
         const satPayment = { ...payment };
         if (satPayment.unit?.startsWith("msat")) {
@@ -73,11 +81,21 @@ export class PaymentHandler {
             satPayment.unit = "sat";
         }
 
+        const p2pkOps = p2pk ? { ...p2pk } : { pubkey: payment.recipientPubkey };
+        if (Array.isArray(p2pkOps?.pubkey)) {
+            p2pkOps.pubkey.push(payment.recipientPubkey);
+            p2pkOps.pubkey.reverse();
+        } else if (p2pkOps?.pubkey && payment.recipientPubkey !== p2pkOps.pubkey) {
+            p2pkOps.pubkey = [payment.recipientPubkey, p2pkOps.pubkey];
+        } else {
+            p2pkOps.pubkey = [payment.recipientPubkey];
+        }
+
         let createResult = await createToken(
             this.wallet,
             satPayment.amount,
             payment.mints,
-            payment.p2pk
+            p2pkOps
         );
         // If Token was created with Mint Transfer, the Token Minted Needs to be saved!
         if (!createResult) {
@@ -86,7 +104,7 @@ export class PaymentHandler {
                     this.wallet,
                     satPayment.amount,
                     undefined,
-                    payment.p2pk
+                    p2pkOps
                 );
             }
 

@@ -24,7 +24,14 @@ export async function mintProofs(
     quote: MintQuoteResponse,
     amount: number,
     mint: string,
-    p2pk?: string,
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
+    },
     counter?: number
 ): Promise<{ proofs: Proof[]; mint: string }> {
     const mintTokenAttempt = (

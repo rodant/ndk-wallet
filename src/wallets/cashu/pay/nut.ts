@@ -21,9 +21,16 @@ export async function createToken(
     wallet: NDKCashuWallet,
     amount: number,
     recipientMints?: MintUrl[],
-    p2pk?: string
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
+    }
 ): Promise<WalletOperation<TokenCreationResult> | null> {
-    p2pk = ensureIsCashuPubkey(p2pk);
+    const pubkey = ensureIsCashuPubkey(Array.isArray(p2pk?.pubkey) ? p2pk.pubkey[0] : p2pk?.pubkey);
     const myMintsWithEnoughBalance = wallet.getMintsWithBalance(amount);
     const hasRecipientMints = recipientMints && recipientMints.length > 0;
     const mintsInCommon = hasRecipientMints
@@ -59,7 +66,14 @@ async function createTokenInMint(
     wallet: NDKCashuWallet,
     mint: MintUrl,
     amount: number,
-    p2pk?: string
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
+    }
 ): Promise<WalletOperation<TokenCreationResult> | null> {
     const cashuWallet = await wallet.getCashuWallet(mint, wallet.bip39seed);
     try {
@@ -75,9 +89,10 @@ async function createTokenInMint(
             async (proofsToUse, allOurProofs) => {
                 const counter = wallet.bip39seed ? currentCounterEntry.counter ?? 0 : undefined;
                 const sendResult = await cashuWallet.send(amount, proofsToUse, {
-                    pubkey: p2pk,
+                    pubkey: Array.isArray(p2pk?.pubkey) ? p2pk.pubkey[0] : p2pk?.pubkey,
                     proofsWeHave: allOurProofs,
-                    counter
+                    counter,
+                    p2pk: p2pk
                 });
 
                 return {
@@ -114,7 +129,14 @@ async function createTokenWithMintTransfer(
     wallet: NDKCashuWallet,
     amount: number,
     recipientMints: MintUrl[],
-    p2pk?: string
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
+    }
 ): Promise<WalletOperation<TokenCreationResult> | null> {
     const generateQuote = async () => {
         const generateQuoteFromSomeMint = async (mint: MintUrl) => {

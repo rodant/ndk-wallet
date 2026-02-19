@@ -197,7 +197,7 @@ export class NDKNWCWallet extends NDKWallet {
 
             this.updateBalance();
 
-            return mintProofs(wallet, quote, amount, mint, payment.p2pk);
+            return mintProofs(wallet, quote, amount, mint, payment.p2pk ? { pubkey: payment.p2pk } : undefined);
         }
     }
 
