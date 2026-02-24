@@ -27,7 +27,15 @@ export async function createOutTxEvent(
     paymentRequest: PaymentWithOptionalZapInfo<LnPaymentInfo | CashuPaymentInfo>,
     paymentResult: WalletOperation<NDKPaymentConfirmationLN | TokenCreationResult>,
     relaySet?: NDKRelaySet,
-    { nutzaps }: { nutzaps?: NDKNutzap[] } = {}
+    { nutzaps }: { nutzaps?: NDKNutzap[] } = {},
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
+    }
 ): Promise<NDKCashuWalletTx> {
     let description: string | undefined = paymentRequest.paymentDescription;
     let amount: number | undefined;
@@ -72,6 +80,13 @@ export async function createOutTxEvent(
         txEvent.destroyedTokenIds = paymentResult.stateUpdate.deleted;
     if (paymentResult.stateUpdate?.reserved)
         txEvent.reservedTokens = [paymentResult.stateUpdate.reserved];
+
+    if (p2pk?.refundKeys) {
+        txEvent.tags.push(["refund", p2pk.refundKeys?.join()]);
+    }
+    if (p2pk?.locktime) {
+        txEvent.tags.push(["locktime", `${p2pk.locktime}`]);
+    } 
 
     await txEvent.sign();
     txEvent.publish(relaySet);
