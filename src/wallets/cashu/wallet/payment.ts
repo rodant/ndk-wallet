@@ -113,7 +113,7 @@ export class PaymentHandler {
             }
         }
 
-        createOutTxEvent(this.wallet.ndk, satPayment, createResult, this.wallet.relaySet, undefined, p2pk);
+        createOutTxEvent(this.wallet.ndk, satPayment, createResult, this.wallet.relaySet);
 
         return createResult.result;
     }
