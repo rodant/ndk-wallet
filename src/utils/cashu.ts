@@ -39,13 +39,19 @@ export async function mintProofs(
         reject: (reason?: any) => void,
         attempt: number
     ) => {
-        const pubkey = ensureIsCashuPubkey(p2pk);
+        let pubkey: string | undefined;
+        if (Array.isArray(p2pk?.pubkey)) {
+            p2pk.pubkey.forEach((pk, i, pks) => pks[i] = ensureIsCashuPubkey(pk) ?? pk);
+            pubkey = p2pk.pubkey.length ? p2pk.pubkey[0] : undefined;
+        } else {
+            pubkey = ensureIsCashuPubkey(p2pk?.pubkey);
+        }
 
         // mint the tokens
         console.log("minting tokens", { attempt, amount, quote: quote.quote, pubkey, mint });
 
         wallet
-            .mintProofs(amount, quote.quote, { pubkey, counter })
+            .mintProofs(amount, quote.quote, { pubkey, counter, p2pk })
             .then((mintProofs) => {
                 console.debug("minted tokens", mintProofs);
 

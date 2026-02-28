@@ -30,7 +30,11 @@ export async function createToken(
         additionalTags?: Array<[key: string, ...values: string[]]>;
     }
 ): Promise<WalletOperation<TokenCreationResult> | null> {
-    const pubkey = ensureIsCashuPubkey(Array.isArray(p2pk?.pubkey) ? p2pk.pubkey[0] : p2pk?.pubkey);
+    if (Array.isArray(p2pk?.pubkey)) {
+        p2pk.pubkey.forEach(pk => ensureIsCashuPubkey(pk));
+    } else {
+        ensureIsCashuPubkey(p2pk?.pubkey);
+    }
     const myMintsWithEnoughBalance = wallet.getMintsWithBalance(amount);
     const hasRecipientMints = recipientMints && recipientMints.length > 0;
     const mintsInCommon = hasRecipientMints

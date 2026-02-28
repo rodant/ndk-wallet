@@ -82,10 +82,10 @@ export class PaymentHandler {
         }
 
         const p2pkOps = p2pk ? { ...p2pk } : { pubkey: payment.recipientPubkey };
-        if (Array.isArray(p2pkOps?.pubkey)) {
+        if (Array.isArray(p2pkOps.pubkey) && !p2pkOps.pubkey.includes(payment.recipientPubkey)) {
             p2pkOps.pubkey.push(payment.recipientPubkey);
             p2pkOps.pubkey.reverse();
-        } else if (p2pkOps?.pubkey && payment.recipientPubkey !== p2pkOps.pubkey) {
+        } else if (!Array.isArray(p2pkOps.pubkey) && p2pkOps.pubkey && payment.recipientPubkey !== p2pkOps.pubkey) {
             p2pkOps.pubkey = [payment.recipientPubkey, p2pkOps.pubkey];
         } else {
             p2pkOps.pubkey = [payment.recipientPubkey];
