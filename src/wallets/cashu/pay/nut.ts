@@ -30,11 +30,21 @@ export async function createToken(
         additionalTags?: Array<[key: string, ...values: string[]]>;
     }
 ): Promise<WalletOperation<TokenCreationResult> | null> {
+    const ensureAreCashuKeys: (pks: string[]) => string[] = pks => {
+        pks.forEach((pk, idx, pks) => pks[idx] = ensureIsCashuPubkey(pk) ?? "");
+        return pks;
+    } 
+
     if (Array.isArray(p2pk?.pubkey)) {
-        p2pk.pubkey.forEach(pk => ensureIsCashuPubkey(pk));
-    } else {
-        ensureIsCashuPubkey(p2pk?.pubkey);
+        ensureAreCashuKeys(p2pk.pubkey);
+    } else if (p2pk?.pubkey) {
+        p2pk.pubkey = ensureIsCashuPubkey(p2pk.pubkey) ?? "";
     }
+
+    if (p2pk?.refundKeys) {
+        ensureAreCashuKeys(p2pk.refundKeys);
+    }
+
     const myMintsWithEnoughBalance = wallet.getMintsWithBalance(amount);
     const hasRecipientMints = recipientMints && recipientMints.length > 0;
     const mintsInCommon = hasRecipientMints
@@ -93,10 +103,9 @@ async function createTokenInMint(
             async (proofsToUse, allOurProofs) => {
                 const counter = wallet.bip39seed ? currentCounterEntry.counter ?? 0 : undefined;
                 const sendResult = await cashuWallet.send(amount, proofsToUse, {
-                    pubkey: Array.isArray(p2pk?.pubkey) ? p2pk.pubkey[0] : p2pk?.pubkey,
                     proofsWeHave: allOurProofs,
                     counter,
-                    p2pk: p2pk
+                    p2pk
                 });
 
                 return {

@@ -88,7 +88,7 @@ export class PaymentHandler {
         } else if (!Array.isArray(p2pkOps.pubkey) && p2pkOps.pubkey && payment.recipientPubkey !== p2pkOps.pubkey) {
             p2pkOps.pubkey = [payment.recipientPubkey, p2pkOps.pubkey];
         } else {
-            p2pkOps.pubkey = [payment.recipientPubkey];
+            p2pkOps.pubkey = payment.recipientPubkey;
         }
 
         let createResult = await createToken(
