@@ -81,14 +81,17 @@ export class PaymentHandler {
             satPayment.unit = "sat";
         }
 
-        const p2pkOps = p2pk ? { ...p2pk } : { pubkey: payment.recipientPubkey };
-        if (Array.isArray(p2pkOps.pubkey) && !p2pkOps.pubkey.includes(payment.recipientPubkey)) {
-            p2pkOps.pubkey.push(payment.recipientPubkey);
-            p2pkOps.pubkey.reverse();
-        } else if (!Array.isArray(p2pkOps.pubkey) && p2pkOps.pubkey && payment.recipientPubkey !== p2pkOps.pubkey) {
-            p2pkOps.pubkey = [payment.recipientPubkey, p2pkOps.pubkey];
-        } else {
-            p2pkOps.pubkey = payment.recipientPubkey;
+        const p2pkOps = p2pk ? p2pk : { pubkey: payment.p2pk ?? "" };
+        if (!p2pkOps.pubkey) {
+            throw new Error("Illegal arguments, either payment.p2pk or p2pk must be defined!");
+        }
+        if (payment.p2pk) {
+            if (Array.isArray(p2pkOps.pubkey) && !p2pkOps.pubkey.includes(payment.p2pk)) {
+                p2pkOps.pubkey.push(payment.p2pk);
+                p2pkOps.pubkey.reverse();
+            } else if (!Array.isArray(p2pkOps.pubkey) && payment.p2pk !== p2pkOps.pubkey) {
+                p2pkOps.pubkey = [payment.p2pk!, p2pkOps.pubkey];
+            } 
         }
 
         let createResult = await createToken(

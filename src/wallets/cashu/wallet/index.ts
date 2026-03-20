@@ -627,33 +627,7 @@ export class NDKCashuWallet extends NDKWallet {
             const currentCounterEntry = await this.state.getCounterEntryFor(cashuWallet.mint);
             const counter = this._bip39seed ? currentCounterEntry.counter ?? 0 : undefined;
             
-            let locktime: number | undefined;
-            let refund: string[] | undefined;
-            let pubkey: string | undefined;
-            try {
-                const secret = JSON.parse(proofs[0].secret);
-                if (Array.isArray(secret) && secret.length === 2) {
-                    const tags = secret[1].tags as string[][];
-                    pubkey = secret[1].data;
-                    for (const tag of tags) {
-                        if (tag[0] === "locktime") {
-                            locktime = Number.parseInt(tag[1]);
-                        }
-                        if (tag[0] === "refund") {
-                            refund = tag.slice(1);
-                        }
-                    }
-                }
-            } catch(error) {
-                console.error("Couldn't parse the secret of the proof. Continue trying to receive without p2pk!");
-            }
-
-            const p2pk = pubkey && locktime && refund ? {
-                pubkey,
-                locktime,
-                refundKeys: refund
-            } : undefined;
-            const res = await cashuWallet.receive({ proofs, mint }, { proofsWeHave, privkey, counter, p2pk });
+            const res = await cashuWallet.receive({ proofs, mint }, { proofsWeHave, privkey, counter });
             if (this._bip39seed && res.length) {
                 await this.incrementDeterministicCounter(currentCounterEntry.counterKey, res.length);
             }
