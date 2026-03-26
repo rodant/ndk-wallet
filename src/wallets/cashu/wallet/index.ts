@@ -840,9 +840,16 @@ export class NDKCashuWallet extends NDKWallet {
    * @param amount
    */
   async cashuPay(
-    payment: NDKZapDetails<CashuPaymentInfo>
-  ): Promise<NDKPaymentConfirmationCashu | undefined> {
-    return this.paymentHandler.cashuPay(payment);
+    payment: NDKZapDetails<CashuPaymentInfo>,
+    p2pk?: {
+      pubkey: string | string[];
+      locktime?: number;
+      refundKeys?: string[];
+      requiredSignatures?: number;
+      requiredRefundSignatures?: number;
+      additionalTags?: Array<[key: string, ...values: string[]]>;
+    }): Promise<NDKPaymentConfirmationCashu | undefined> {
+      return this.paymentHandler.cashuPay(payment, p2pk);
   }
 
   public wallets = new Map<string, CashuWallet>();
