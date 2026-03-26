@@ -1,0 +1,4 @@
+[submodule "packages/cashu-ts"]
+	path = packages/cashu-ts
+	url = git@github.com:rodant/cashu-ts.git
+	branch = fix-send-p2pk-pr
