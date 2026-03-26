@@ -1,13 +1,23 @@
-import { PaymentHandler } from "../wallet/payment";
-import { NDKCashuWallet } from "../wallet";
-import { findMintsInCommon } from "./nut";
-import { MintUrl } from "../mint/utils";
-import NDK from "@nostr-dev-kit/ndk";
+import { findMintsInCommon, createToken } from "./nut";
+import type { NDKCashuWallet } from "../wallet";
+import type { MintUrl } from "../mint/utils";
+import { withProofReserve } from "../wallet/effect";
+import { consolidateMintTokens } from "../validate.js";
 
-const ndk = new NDK();
+jest.mock("../wallet/effect", () => ({
+    withProofReserve: jest.fn(),
+}));
+jest.mock("../validate.js", () => ({
+    consolidateMintTokens: jest.fn(),
+}));
+
+const withProofReserveMock = jest.mocked(withProofReserve);
+const consolidateMintTokensMock = jest.mocked(consolidateMintTokens);
 
 describe("nut.ts", () => {
-    const wallet = new NDKCashuWallet(ndk);
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
 
     describe("findMintsInCommon", () => {
         it("should return mints that are common in all collections", () => {
@@ -25,6 +35,48 @@ describe("nut.ts", () => {
 
             const result = findMintsInCommon([user1Mints, user2Mints]);
             expect(result).toEqual([]);
+        });
+    });
+
+    describe("createToken", () => {
+        it("retries after consolidating already spent proofs", async () => {
+            const wallet = {
+                getMintsWithBalance: jest.fn().mockReturnValue(["https://mint.test"]),
+                getCashuWallet: jest
+                    .fn()
+                    .mockResolvedValue({ mint: { mintUrl: "https://mint.test" } }),
+                state: {
+                    getCounterEntryFor: jest
+                        .fn()
+                        .mockResolvedValue({ counterKey: "mint|keyset", counter: 0 })
+                },
+                bip39seed: undefined,
+            } as unknown as NDKCashuWallet;
+
+            withProofReserveMock
+                .mockRejectedValueOnce(new Error("Token already spent."))
+                .mockResolvedValueOnce({
+                    result: {
+                        proofs: [{ amount: 1, C: "c1" }],
+                        mint: "https://mint.test",
+                    },
+                    proofsChange: {
+                        mint: "https://mint.test",
+                        store: [],
+                        destroy: [],
+                    },
+                    stateUpdate: null,
+                    mint: "https://mint.test",
+                    fee: 0,
+                } as any);
+
+            consolidateMintTokensMock.mockResolvedValue(undefined as any);
+
+            const result = await createToken(wallet, 1, ["https://mint.test"]);
+
+            expect(result?.result?.mint).toBe("https://mint.test");
+            expect(withProofReserveMock).toHaveBeenCalledTimes(2);
+            expect(consolidateMintTokensMock).toHaveBeenCalledWith("https://mint.test", wallet);
         });
     });
 

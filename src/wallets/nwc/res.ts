@@ -23,8 +23,7 @@ export async function waitForResponse<M extends keyof NDKNWCResponseMap>(
                 "#e": [request.id],
                 limit: 1,
             },
-            { groupable: false, pool: this.pool },
-            this.relaySet
+            { groupable: false, pool: this.pool, relaySet: this.relaySet }
         );
 
         sub.on("event", async (event: NDKEvent) => {

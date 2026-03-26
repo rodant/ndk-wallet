@@ -595,16 +595,12 @@ describe("NDKNutzapMonitor", () => {
                 return nutzap;
             });
 
-            // Extract the subscription callback
-            const subOptions = subscribeSpy.mock.calls[0][3];
-
-            // Call the subscription callback with a new event
-            if (subOptions && typeof subOptions === "object" && "onEvent" in subOptions) {
-                const nutzapEvent = new NDKEvent(ndk);
-                nutzapEvent.id = nutzap.id;
-                // @ts-ignore - suppressing type error for testing
-                subOptions.onEvent(nutzapEvent);
-            }
+            const nutzapEvent = new NDKEvent(ndk);
+            nutzapEvent.id = nutzap.id;
+            const subscription = subscribeSpy.mock.results[0]?.value as unknown as {
+                emit?: (eventName: string, event: NDKEvent) => void;
+            };
+            subscription?.emit?.("event", nutzapEvent);
 
             // Check that the event handler was called
             expect(eventHandlerSpy).toHaveBeenCalled();

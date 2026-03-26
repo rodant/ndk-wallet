@@ -1,19 +1,31 @@
 import { CashuWallet, CashuMint, GetInfoResponse, MintKeys } from "@cashu/cashu-ts";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@noble/hashes/utils";
 import { MintUrl } from "./mint/utils";
 
 const mintWalletPromises = new Map<string, Promise<CashuWallet | null>>();
 
-function mintKey(mint: MintUrl, unit: string, pk?: Uint8Array) {
+function seedFingerprint(seed: Uint8Array): string {
+    return bytesToHex(sha256(seed)).slice(0, 16);
+}
+
+function mintKey(mint: MintUrl, unit: string, pk?: Uint8Array, bip39seed?: Uint8Array) {
     if (unit === "sats") {
         unit = "sat";
     }
 
+    let key = `${mint}-${unit}`;
+
     if (pk) {
         const pkStr = new TextDecoder().decode(pk);
-        return `${mint}-${unit}-${pkStr}`;
+        key += `-${pkStr}`;
     }
 
-    return `${mint}-${unit}`;
+    if (bip39seed && bip39seed.length > 0) {
+        key += `-seed:${seedFingerprint(bip39seed)}`;
+    }
+
+    return key;
 }
 
 export async function walletForMint(
@@ -49,7 +61,7 @@ export async function walletForMint(
     }
 
     const unit = "sat";
-    const key = mintKey(mint, unit, pk);
+    const key = mintKey(mint, unit, pk, bip39seed);
 
     // Check if there's already a promise to load this wallet
     if (mintWalletPromises.has(key)) {

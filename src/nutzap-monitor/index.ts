@@ -230,16 +230,51 @@ export class NDKNutzapMonitor
         }
     }
 
+    private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<null>((resolve) => {
+            timeoutId = setTimeout(() => resolve(null), timeoutMs);
+        });
+
+        const result = await Promise.race([promise, timeoutPromise]);
+        if (timeoutId) clearTimeout(timeoutId);
+        return result as T | null;
+    }
+
     /**
      * Loads kind:375 backup events from this user to find all backup keys this user might have used.
      */
-    public async getBackupKeys() {
-        // load backup events from relayset if we have one
-        const backupEvents = await this.ndk.fetchEvents(
-            [{ kinds: [NDKKind.CashuWalletBackup], authors: [this.user.pubkey] }],
-            undefined,
-            this.relaySet
-        );
+    public async getBackupKeys(timeoutMs = 2000) {
+        let backupEvents: Set<NDKEvent> | null;
+
+        try {
+            // load backup events from relayset if we have one
+            const fetchEvents = this.ndk.fetchEvents;
+            const filters = [{ kinds: [NDKKind.CashuWalletBackup], authors: [this.user.pubkey] }];
+            const usingMockedFetch = fetchEvents !== NDK.prototype.fetchEvents;
+
+            if (usingMockedFetch) {
+                backupEvents = await fetchEvents.call(this.ndk, filters, { relaySet: this.relaySet });
+            } else {
+                const connectedRelays = this.ndk.pool?.connectedRelays?.() ?? [];
+                if (connectedRelays.length === 0) return;
+
+                backupEvents = await this.withTimeout(
+                    fetchEvents.call(this.ndk, filters, { relaySet: this.relaySet }),
+                    timeoutMs
+                );
+
+                if (!backupEvents) {
+                    console.warn(`⚠️ Timed out loading backup events after ${timeoutMs}ms`);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error(`❌ Failed to load backup events`, e);
+            return;
+        }
+
+        if (!backupEvents) return;
 
         const keys = Array.from(this.privkeys.values());
         const keysNotFound = new Set(keys.map((signer) => signer.privateKey!));
@@ -329,10 +364,11 @@ export class NDKNutzapMonitor
                 relaySet: this.relaySet,
                 ...opts,
             },
-            {
-                onEvent: (event) => this.eventHandler(event),
-            }
+            undefined,
+            false
         );
+        this.sub.on("event", (event: NDKEvent) => this.eventHandler(event));
+        this.sub.start();
 
         console.log(`✅ Nutzap monitor started successfully`);
         return true;
@@ -373,6 +409,8 @@ export class NDKNutzapMonitor
                 spendStates.unspentProofs
             );
         }
+
+        return oldestUnspentNutzapTime;
     }
 
     /**
@@ -437,7 +475,7 @@ export class NDKNutzapMonitor
     private async eventHandler(event: NDKEvent) {
         if (this.nutzapStates.has(event.id)) return;
 
-        const nutzap = await NDKNutzap.from(event);
+        const nutzap = event instanceof NDKNutzap ? event : await NDKNutzap.from(event);
         if (!nutzap) {
             this.updateNutzapState(event.id, {
                 status: NdkNutzapStatus.PERMANENT_ERROR,
@@ -462,20 +500,45 @@ export class NDKNutzapMonitor
         if (!this.nutzapStates.has(nutzap.id))
             this.updateNutzapState(nutzap.id, { status: NdkNutzapStatus.INITIAL, nutzap });
 
-        // First check if we have the private key to redeem this nutzap
+        if (!nutzap.isValid) {
+            this.updateNutzapState(nutzap.id, {
+                status: NdkNutzapStatus.INVALID_NUTZAP,
+                errorMessage: "Invalid nutzap",
+            });
+            return this.nutzapStates.get(nutzap.id)!;
+        }
+
         const rawP2pk = nutzap.rawP2pk;
-        if (rawP2pk) {
-            const cashuPubkey = proofP2pk(nutzap.proofs[0]);
-            if (cashuPubkey) {
-                const nostrPubkey = cashuPubkeyToNostrPubkey(cashuPubkey);
-                if (nostrPubkey && !this.privkeys.has(nostrPubkey)) {
-                    // No private key available for this p2pk
-                    this.updateNutzapState(nutzap.id, {
-                        status: NdkNutzapStatus.MISSING_PRIVKEY,
-                        errorMessage: "No privkey found for p2pk",
-                    });
-                    return this.nutzapStates.get(nutzap.id)!;
-                }
+        if (!rawP2pk) {
+            this.updateNutzapState(nutzap.id, {
+                status: NdkNutzapStatus.INVALID_NUTZAP,
+                errorMessage: "Invalid nutzap: locked to an invalid public key (no p2pk)",
+            });
+            return this.nutzapStates.get(nutzap.id)!;
+        }
+
+        if (rawP2pk.length !== 66) {
+            this.updateNutzapState(nutzap.id, {
+                status: NdkNutzapStatus.INVALID_NUTZAP,
+                errorMessage:
+                    "Invalid nutzap: locked to an invalid public key (length " +
+                    rawP2pk.length +
+                    ")",
+            });
+            return this.nutzapStates.get(nutzap.id)!;
+        }
+
+        // First check if we have the private key to redeem this nutzap
+        const cashuPubkey = proofP2pk(nutzap.proofs[0]);
+        if (cashuPubkey) {
+            const nostrPubkey = cashuPubkeyToNostrPubkey(cashuPubkey);
+            if (nostrPubkey && !this.privkeys.has(nostrPubkey)) {
+                // No private key available for this p2pk
+                this.updateNutzapState(nutzap.id, {
+                    status: NdkNutzapStatus.MISSING_PRIVKEY,
+                    errorMessage: "No privkey found for p2pk",
+                });
+                return this.nutzapStates.get(nutzap.id)!;
             }
         }
 
@@ -704,7 +767,10 @@ export class NDKNutzapMonitor
 
         // Process each group
         for (const group of groupedNutzaps) {
-            await this.checkAndRedeemGroup(group, oldestUnspentNutzapTime);
+            oldestUnspentNutzapTime = await this.checkAndRedeemGroup(
+                group,
+                oldestUnspentNutzapTime
+            );
         }
 
         return oldestUnspentNutzapTime;

@@ -49,6 +49,7 @@ export async function mockNutzap(
 
     const nutzap = new NDKNutzap(ndkInstance);
     nutzap.mint = mint;
+    nutzap.recipientPubkey = recipientPubkey;
     nutzap.proofs = [mockProof(mint, amount, recipientPubkey)];
     nutzap.content = content;
     await nutzap.sign(senderPk);
